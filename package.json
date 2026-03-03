@@ -1,0 +1,28 @@
+{
+  "name": "@altiora/gdspark-cli",
+  "version": "0.1.0",
+  "description": "GDS command lexer/parser library",
+  "type": "module",
+  "private": false,
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./lexer": "./src/lexer.ts",
+    "./parser": "./src/parser.ts",
+    "./types": "./src/types.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
