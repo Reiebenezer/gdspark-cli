@@ -17,10 +17,10 @@ bun install
 Start interactive mode:
 
 ```bash
-bun run src/index.ts
+bun run index.ts
 ```
 
-Then enter one command per line. The CLI prints parsed AST JSON for each line. 
+Then enter one command per line. The CLI prints parsed AST JSON for each line.
 
 Exit commands:
 - `exit`
@@ -31,43 +31,53 @@ Exit commands:
 
 The parser currently supports:
 
-- `JI` sign in
-- `JJ` sign in
-- `JO` sign out
-- `JM` area move
-- `JD` area status
-- `JB` sign-in redisplay
-- `RF` received from
-- `ET` end transaction
-- `ER` end and redisplay
-- `ETK` end transaction and keep
-- `ERK` end and redisplay and keep
-- `IG` ignore
-- `IR` ignore and redisplay
-- `XE` cancel line
-- `XI` cancel itinerary
-- `SX` cancel segment
-- `RT` retrieve record locator
+- `AN` availability lookup
+- `SS` sell/select from availability
+- `NM` passenger name input
+- `APM` passenger mobile
+- `APE` passenger email
+- `TKTL` ticketing time limit
+- `ER` end/save record
+- `XE` delete line number
+- `FXP` pricing on selected booking class
+- `FXB` lowest available pricing
+- `TTK` ticket issuance by TST selector
+- `TT` ticket issuance with quantity
 
 ## Syntax Notes
 
-- `JI` / `JJ`: supports optional area selector (`*`, single area, or area list like `A/B/C`), required `agentSign/dutyCode`, optional `- password`
-- `JO`: requires area selector (`*`, `A`, or `A/B/C`)
-- `JM`: requires one area letter `A` to `F`
-- `RF`: requires whitespace after `RF`, then free text
-- `XE`: requires whitespace before integer (example: `XE 12`)
-- `SX`: must be compact with integer (example: `SX6`)
-- `RT`: requires a 6-character alphanumeric record locator
+- `AN`: `ANDDMMMOOODDD` with optional `/AIRLINE`
+- Example: `AN15SEPILOMNL`, `AN15SEPILOMNL/A5J`
+- `SS`: compact format `SS<passengerCount><bookingClass><flightNumber>`
+- Example: `SS1Y3`, `SS2T5`
+- `NM`: one or more entries in `<count><SURNAME>/<Given>/<Given>` format, comma-separated for multiple entries; trailing title is supported
+- Example: `NM1SMITH/John Mr`, `NM1SMITH/John,1ROXAS/Peter`
+- `APM` / `APE`: accepts dashed and non-dashed value entry
+- Example: `APM - 09171234567`, `APE - r@r.com`
+- `TKTL`: compact date format `TKTLDDMMM`
+- Example: `TKTL05MAR`
+- `XE`: requires whitespace before integer line number
+- Example: `XE 2`
+- `TTK`: requires `/T<n>` or `/T*`
+- Example: `TTK/T1`, `TTK/T*`
+- `TT`: requires `/T<n>-<quantity>`
+- Example: `TT/T1-3`
 
 ## Examples
 
 ```text
-JI * ABC123/GS - secret
-JO A/B/C
-JM F
-RF JOHN DOE
-ET
-XE 12
-SX6
-RT ABC123
+AN15SEPILOMNL
+AN15SEPILOMNL/A5J
+SS1Y3
+NM2SMITH/John/Peter Mr
+APM - 09171234567
+APE - r@r.com
+TKTL05MAR
+ER
+XE 2
+FXP
+FXB
+TTK/T1
+TTK/T*
+TT/T1-3
 ```
