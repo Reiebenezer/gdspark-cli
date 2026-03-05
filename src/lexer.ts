@@ -1,8 +1,6 @@
 import {
   COMMAND_CODES,
-  type AreaLetter,
   type CommandCode,
-  type DutyCode,
   type LexError,
   type LexerResult,
   type SourcePosition,
@@ -10,15 +8,11 @@ import {
   type Token,
 } from './types';
 
-const AREA_LETTER_SET = new Set<AreaLetter>(['A', 'B', 'C', 'D', 'E', 'F']);
-const DUTY_CODE_SET = new Set<DutyCode>(['AS', 'CE', 'GS', 'PD', 'PR', 'RC', 'SU', 'TR']);
 const COMMAND_CODE_SET = new Set<string>(COMMAND_CODES);
 const COMMAND_CODES_LONGEST_FIRST = [...COMMAND_CODES].sort((a, b) => b.length - a.length);
 
-const ALNUM_RE = /^[A-Za-z0-9]+$/;
-const REC_LOCATOR_RE = /^[A-Za-z0-9]{6}$/;
-const AGENT_SIGN_RE = /^[A-Za-z0-9]{4,8}$/;
 const INTEGER_RE = /^\d+$/;
+const WORD_RE = /^[A-Za-z0-9]+$/;
 
 const isWhitespace = (ch: string): boolean => /\s/.test(ch);
 const isTokenBoundary = (ch: string): boolean =>
@@ -65,16 +59,10 @@ export function tokenize(input: string): LexerResult {
   const classifyLexeme = (lexeme: string, span: SourceSpan): void => {
     if (COMMAND_CODE_SET.has(lexeme)) {
       emit({ type: lexeme as CommandCode, lexeme, span });
-    } else if (DUTY_CODE_SET.has(lexeme as DutyCode)) {
-      emit({ type: 'DUTY_CODE', lexeme, value: lexeme as DutyCode, span });
-    } else if (AREA_LETTER_SET.has(lexeme as AreaLetter)) {
-      emit({ type: 'AREA_LETTER', lexeme, value: lexeme as AreaLetter, span });
     } else if (INTEGER_RE.test(lexeme)) {
       emit({ type: 'INTEGER', lexeme, value: Number(lexeme), span });
-    } else if (ALNUM_RE.test(lexeme) && REC_LOCATOR_RE.test(lexeme)) {
-      emit({ type: 'REC_LOCATOR', lexeme, value: lexeme, span });
-    } else if (ALNUM_RE.test(lexeme) && AGENT_SIGN_RE.test(lexeme)) {
-      emit({ type: 'AGENT_SIGN', lexeme, value: lexeme, span });
+    } else if (WORD_RE.test(lexeme)) {
+      emit({ type: 'WORD', lexeme, value: lexeme, span });
     } else if (lexeme.length > 0) {
       emit({ type: 'FREETEXT', lexeme, value: lexeme, span });
     } else {
@@ -165,8 +153,8 @@ export function tokenize(input: string): LexerResult {
         continue;
       }
     }
-    classifyLexeme(lexeme, spanFrom(start, end));
 
+    classifyLexeme(lexeme, spanFrom(start, end));
     index = endIndex;
   }
 

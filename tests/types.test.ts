@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { COMMAND_CODES, TOKEN_TYPES } from './types';
+import { COMMAND_CODES, TOKEN_TYPES } from '../src/types';
 
 describe('types contracts', () => {
   test('command codes are unique and non-empty', () => {

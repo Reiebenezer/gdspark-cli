@@ -1,9 +1,8 @@
 import { tokenize } from './lexer';
 import type {
-  AreaLetter,
-  AreaSelector,
   CommandCode,
   CommandParam,
+  NameEntry,
   ParsedCommand,
   SourceSpan,
   Token,
@@ -22,29 +21,11 @@ class ParseError extends Error {
 type ParseInput = string | Token[];
 
 const isCommandCode = (type: Token['type']): type is CommandCode =>
-  [
-    'JI',
-    'JJ',
-    'JO',
-    'JM',
-    'JD',
-    'JB',
-    'RF',
-    'ET',
-    'ER',
-    'ETK',
-    'ERK',
-    'IG',
-    'IR',
-    'XE',
-    'XI',
-    'SX',
-    'RT',
-  ].includes(type);
+  ['AN', 'SS', 'NM', 'APM', 'APE', 'TKTL', 'ER', 'XE', 'FXP', 'FXB', 'TTK', 'TT'].includes(type);
 
-const isAlnum = (value: string): boolean => /^[A-Za-z0-9]+$/.test(value);
-const isAgentSign = (value: string): boolean => isAlnum(value) && value.length >= 4 && value.length <= 8;
-const isRecLocator = (value: string): boolean => isAlnum(value) && value.length === 6;
+const MONTH_RE = /^[A-Za-z]{3}$/;
+const AIRPORT_RE = /^[A-Za-z]{3}$/;
+const BRAND_RE = /^[A-Za-z0-9]{2,4}$/;
 
 class Parser {
   private readonly tokens: Token[];
@@ -79,227 +60,322 @@ class Parser {
 
   private parseByCode(code: CommandCode, params: CommandParam[]): ParsedCommand {
     switch (code) {
-      case 'JI':
-      case 'JJ':
-        return this.parseSignIn(code, params);
-      case 'JO':
-        return this.parseSignOut(params);
-      case 'JM':
-        return this.parseAreaMove(params);
-      case 'JD':
-        return { code: 'JD', params };
-      case 'JB':
-        return { code: 'JB', params };
-      case 'RF':
-        return this.parsePnrReceivedFrom(params);
-      case 'ET':
+      case 'AN':
+        return this.parseAvailability(params);
+      case 'SS':
+        return this.parseSell(params);
+      case 'NM':
+        return this.parseNames(params);
+      case 'APM':
+        return this.parsePassengerMobile(params);
+      case 'APE':
+        return this.parsePassengerEmail(params);
+      case 'TKTL':
+        return this.parseTicketingLimit(params);
       case 'ER':
-      case 'ETK':
-      case 'ERK':
-        return { code, params };
-      case 'IG':
-      case 'IR':
-        return { code, params };
+        return { code: 'ER', params };
       case 'XE':
-      case 'XI':
-      case 'SX':
-        return this.parsePnrCancel(code, params);
-      case 'RT':
-        return this.parsePnrRetrieve(params);
+        return this.parseDeleteLine(params);
+      case 'FXP':
+      case 'FXB':
+        return { code, params };
+      case 'TTK':
+        return this.parseIssueTtk(params);
+      case 'TT':
+        return this.parseIssueTt(params);
     }
   }
 
-  private parseSignIn(code: 'JI' | 'JJ', params: CommandParam[]): ParsedCommand {
-    this.skipWs();
-    if (this.isAtEnd()) {
-      return { code, params };
+  private parseAvailability(params: CommandParam[]): ParsedCommand {
+    const routeToken = this.readRequiredValue('Expected AN payload like 15SEPILOMNL');
+    const match = routeToken.lexeme.match(/^(\d{2})([A-Za-z]{3})([A-Za-z]{3})([A-Za-z]{3})$/);
+    if (!match) {
+      throw new ParseError('AN payload must be DDMMM + origin + destination (e.g. 15SEPILOMNL)', routeToken.span);
     }
 
-    let area: AreaSelector | undefined;
-    const areaSelector = this.tryParseAreaSelector();
-    if (areaSelector !== undefined) {
-      area = areaSelector;
-      params.push({ name: 'area', value: Array.isArray(area) ? area.join('/') : area });
+    const day = match[1];
+    const month = match[2];
+    const origin = match[3];
+    const destination = match[4];
+    if (!day || !month || !origin || !destination) {
+      throw new ParseError('Invalid AN payload values', routeToken.span);
+    }
+    const travelDate = `${day}${month.toUpperCase()}`;
+    if (!MONTH_RE.test(month) || !AIRPORT_RE.test(origin) || !AIRPORT_RE.test(destination)) {
+      throw new ParseError('Invalid AN payload values', routeToken.span);
+    }
+
+    params.push({ name: 'travelDate', value: travelDate });
+    params.push({ name: 'origin', value: origin.toUpperCase() });
+    params.push({ name: 'destination', value: destination.toUpperCase() });
+
+    this.skipWs();
+    let airlineBrandCode: string | undefined;
+    if (this.match('SLASH')) {
       this.skipWs();
+      const brandToken = this.readRequiredValue('Expected airline brand code after "/"');
+      if (!BRAND_RE.test(brandToken.lexeme)) {
+        throw new ParseError('Airline brand code must be 2-4 alphanumeric characters', brandToken.span);
+      }
+      airlineBrandCode = brandToken.lexeme.toUpperCase();
+      params.push({ name: 'airlineBrandCode', value: airlineBrandCode });
     }
 
-    if (this.isAtEnd()) {
-      throw new ParseError('Expected agent sign and duty code for sign-in', this.peek(-1)?.span);
+    return {
+      code: 'AN',
+      params,
+      travelDate,
+      origin: origin.toUpperCase(),
+      destination: destination.toUpperCase(),
+      ...(airlineBrandCode ? { airlineBrandCode } : {}),
+    };
+  }
+
+  private parseSell(params: CommandParam[]): ParsedCommand {
+    const sellToken = this.readRequiredValue('Expected SS payload like 1Y3');
+    const match = sellToken.lexeme.match(/^(\d+)([A-Za-z])(\d+)$/);
+    if (!match) {
+      throw new ParseError('SS payload must be <passengers><bookingClass><flightNumber> (e.g. 1Y3)', sellToken.span);
     }
 
-    const agentToken = this.peek();
-    if (!agentToken || !['AGENT_SIGN', 'REC_LOCATOR', 'FREETEXT'].includes(agentToken.type)) {
-      throw new ParseError('Expected agent sign', agentToken?.span);
+    const passengerGroup = match[1];
+    const classGroup = match[2];
+    const flightGroup = match[3];
+    if (!passengerGroup || !classGroup || !flightGroup) {
+      throw new ParseError('Invalid SS payload values', sellToken.span);
     }
-    const agentSign = agentToken.lexeme;
-    if (!isAgentSign(agentSign)) {
-      throw new ParseError('Invalid agent sign; expected 4-8 alphanumeric characters', agentToken.span);
-    }
-    this.index += 1;
-    params.push({ name: 'agentSign', value: agentSign });
 
+    const passengerCount = Number(passengerGroup);
+    const bookingClass = classGroup.toUpperCase();
+    const flightNumber = Number(flightGroup);
+
+    params.push({ name: 'passengerCount', value: String(passengerCount) });
+    params.push({ name: 'bookingClass', value: bookingClass });
+    params.push({ name: 'flightNumber', value: String(flightNumber) });
+
+    return { code: 'SS', params, passengerCount, bookingClass, flightNumber };
+  }
+
+  private parseNames(params: CommandParam[]): ParsedCommand {
+    const rawNames = this.collectRemainingText(true).trim();
+    if (rawNames.length === 0) {
+      throw new ParseError('Expected passenger name payload after NM', this.peek()?.span);
+    }
+
+    let namesCore = rawNames;
+    let title: string | undefined;
+    const lastSpace = rawNames.lastIndexOf(' ');
+    if (lastSpace > 0) {
+      const maybeTitle = rawNames.slice(lastSpace + 1).trim();
+      if (/^[A-Za-z.]{2,6}$/.test(maybeTitle)) {
+        title = maybeTitle;
+        namesCore = rawNames.slice(0, lastSpace).trim();
+      }
+    }
+
+    const entries = namesCore
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => this.parseNameEntry(part));
+
+    if (entries.length === 0) {
+      throw new ParseError('No valid NM name entries found', this.peek(-1)?.span);
+    }
+
+    params.push({ name: 'rawNames', value: rawNames });
+    if (title) {
+      params.push({ name: 'title', value: title });
+    }
+
+    return {
+      code: 'NM',
+      params,
+      rawNames,
+      entries,
+      ...(title ? { title } : {}),
+    };
+  }
+
+  private parseNameEntry(value: string): NameEntry {
+    const match = value.match(/^(\d+)([A-Za-z]+)\/(.+)$/);
+    if (!match) {
+      throw new ParseError(`Invalid NM entry "${value}"; expected format like 1SMITH/John`);
+    }
+
+    const countGroup = match[1];
+    const surnameGroup = match[2];
+    const givenGroup = match[3];
+    if (!countGroup || !surnameGroup || !givenGroup) {
+      throw new ParseError(`Invalid NM entry "${value}"; expected format like 1SMITH/John`);
+    }
+
+    const count = Number(countGroup);
+    const surname = surnameGroup.toUpperCase();
+    const givenNames = givenGroup
+      .split('/')
+      .map((name) => name.trim())
+      .filter(Boolean);
+
+    if (givenNames.length === 0) {
+      throw new ParseError(`NM entry "${value}" is missing given name`);
+    }
+
+    return { count, surname, givenNames };
+  }
+
+  private parsePassengerMobile(params: CommandParam[]): ParsedCommand {
+    const mobile = this.parseDashedValue('Expected mobile number after APM');
+    params.push({ name: 'mobile', value: mobile });
+    return { code: 'APM', params, mobile };
+  }
+
+  private parsePassengerEmail(params: CommandParam[]): ParsedCommand {
+    const email = this.parseDashedValue('Expected email after APE');
+    params.push({ name: 'email', value: email });
+    return { code: 'APE', params, email };
+  }
+
+  private parseDashedValue(errorMessage: string): string {
     this.skipWs();
-    this.expect('SLASH', 'Expected "/" before duty code');
-    this.skipWs();
-
-    const dutyToken = this.peek();
-    if (!dutyToken || dutyToken.type !== 'DUTY_CODE') {
-      throw new ParseError('Expected duty code', dutyToken?.span);
-    }
-    this.index += 1;
-    const dutyCode = dutyToken.value;
-    params.push({ name: 'dutyCode', value: dutyCode });
-
-    this.skipWs();
-    let password: string | undefined;
     if (this.match('DASH')) {
       this.skipWs();
-      password = this.collectRemainingText(true);
-      if (password.length === 0) {
-        throw new ParseError('Expected password text after dash', this.peek()?.span);
-      }
-      params.push({ name: 'password', value: password });
     }
 
-    const args = {
-      agentSign,
-      dutyCode,
-      ...(area !== undefined ? { area } : {}),
-      ...(password !== undefined ? { password } : {}),
-    };
+    const text = this.collectRemainingText(true).trim();
+    if (text.length === 0) {
+      throw new ParseError(errorMessage, this.peek()?.span);
+    }
 
-    return { code, params, args };
+    return text;
   }
 
-  private parseSignOut(params: CommandParam[]): ParsedCommand {
-    this.skipWs();
-    if (this.isAtEnd()) {
-      return { code: 'JO', params };
+  private parseTicketingLimit(params: CommandParam[]): ParsedCommand {
+    const dateToken = this.readRequiredValue('Expected TKTL date like 05MAR');
+    const match = dateToken.lexeme.match(/^(\d{2})([A-Za-z]{3})$/);
+    if (!match) {
+      throw new ParseError('TKTL must be in DDMMM format (e.g. 05MAR)', dateToken.span);
     }
 
-    const area = this.tryParseAreaSelector();
-    if (area === undefined) {
-      throw new ParseError('Expected area selector for sign-out', this.peek()?.span);
+    const dayGroup = match[1];
+    const monthGroup = match[2];
+    if (!dayGroup || !monthGroup) {
+      throw new ParseError('TKTL must be in DDMMM format (e.g. 05MAR)', dateToken.span);
     }
 
-    params.push({ name: 'area', value: Array.isArray(area) ? area.join('/') : area });
-    return { code: 'JO', params, area };
+    const day = Number(dayGroup);
+    const month = monthGroup.toUpperCase();
+    const dateCode = `${dayGroup}${month}`;
+
+    params.push({ name: 'dateCode', value: dateCode });
+    params.push({ name: 'day', value: String(day) });
+    params.push({ name: 'month', value: month });
+
+    return { code: 'TKTL', params, dateCode, day, month };
   }
 
-  private parseAreaMove(params: CommandParam[]): ParsedCommand {
-    this.skipWs();
-    const token = this.peek();
-    if (!token || token.type !== 'AREA_LETTER') {
-      throw new ParseError('Expected area letter after JM', token?.span);
-    }
-    this.index += 1;
-    params.push({ name: 'area', value: token.value });
-    return { code: 'JM', params, area: token.value };
-  }
-
-  private parsePnrReceivedFrom(params: CommandParam[]): ParsedCommand {
+  private parseDeleteLine(params: CommandParam[]): ParsedCommand {
     const ws = this.peek();
     if (!ws || ws.type !== 'WS') {
-      throw new ParseError('Expected whitespace after RF', ws?.span);
+      throw new ParseError('Expected whitespace after XE', ws?.span);
     }
     this.index += 1;
-    const text = this.collectRemainingText(true);
-    if (text.length === 0) {
-      throw new ParseError('Expected free text after RF', this.peek()?.span);
+
+    const lineToken = this.peek();
+    if (!lineToken || lineToken.type !== 'INTEGER') {
+      throw new ParseError('XE expects a line number (e.g. XE 2)', lineToken?.span);
     }
-    params.push({ name: 'text', value: text });
-    return { code: 'RF', params, text };
+
+    this.index += 1;
+    params.push({ name: 'lineNumber', value: String(lineToken.value) });
+    return { code: 'XE', params, lineNumber: lineToken.value };
   }
 
-  private parsePnrCancel(code: 'XE' | 'XI' | 'SX', params: CommandParam[]): ParsedCommand {
-    if (code === 'XI') {
-      return { code: 'XI', params };
+  private parseIssueTtk(params: CommandParam[]): ParsedCommand {
+    this.skipWs();
+    this.expect('SLASH', 'Expected "/" after TTK');
+    this.skipWs();
+
+    const selector = this.readTSelector(true);
+    if (selector === '*') {
+      params.push({ name: 'mode', value: 'all' });
+      return { code: 'TTK', params, mode: 'all' };
     }
 
-    if (code === 'XE') {
-      const ws = this.peek();
-      if (!ws || ws.type !== 'WS') {
-        throw new ParseError('Expected whitespace after XE', ws?.span);
+    params.push({ name: 'mode', value: 'single' });
+    params.push({ name: 'tstType', value: String(selector) });
+    return { code: 'TTK', params, mode: 'single', tstType: selector };
+  }
+
+  private parseIssueTt(params: CommandParam[]): ParsedCommand {
+    this.skipWs();
+    this.expect('SLASH', 'Expected "/" after TT');
+    this.skipWs();
+
+    const tstType = this.readTSelector(false);
+    this.skipWs();
+
+    this.expect('DASH', 'Expected "-" and quantity after TT/T<n>');
+    this.skipWs();
+
+    const quantityToken = this.peek();
+    if (!quantityToken || quantityToken.type !== 'INTEGER') {
+      throw new ParseError('Expected ticket quantity after "-"', quantityToken?.span);
+    }
+    this.index += 1;
+
+    params.push({ name: 'tstType', value: String(tstType) });
+    params.push({ name: 'quantity', value: String(quantityToken.value) });
+
+    return {
+      code: 'TT',
+      params,
+      tstType,
+      quantity: quantityToken.value,
+    };
+  }
+
+  private readTSelector(allowAll: true): number | '*';
+  private readTSelector(allowAll: false): number;
+  private readTSelector(allowAll: boolean): number | '*' {
+    const token = this.peek();
+    if (!token) {
+      throw new ParseError('Expected TST selector after "/"');
+    }
+
+    if (token.type === 'WORD') {
+      const upper = token.lexeme.toUpperCase();
+      if (allowAll && upper === 'T' && this.peek(1)?.type === 'STAR') {
+        this.index += 2;
+        return '*';
       }
-      this.index += 1;
-    } else if (code === 'SX' && this.peek()?.type === 'WS') {
-      throw new ParseError('SX must be followed directly by an integer (e.g. SX6)', this.peek()?.span);
+
+      const value = upper.match(/^T(\d+)$/);
+      const valueGroup = value?.[1];
+      if (value && valueGroup) {
+        this.index += 1;
+        return Number(valueGroup);
+      }
+
+      if (upper === 'T' && this.peek(1)?.type === 'INTEGER') {
+        const numberToken = this.peek(1);
+        this.index += 2;
+        return (numberToken as Extract<Token, { type: 'INTEGER' }>).value;
+      }
     }
 
-    const numberToken = this.peek();
-    if (!numberToken || numberToken.type !== 'INTEGER') {
-      throw new ParseError(`Expected integer after ${code}`, numberToken?.span);
-    }
-    this.index += 1;
-
-    if (code === 'XE') {
-      params.push({ name: 'lineNumber', value: String(numberToken.value) });
-      return { code: 'XE', params, lineNumber: numberToken.value };
-    }
-
-    params.push({ name: 'segmentNumber', value: String(numberToken.value) });
-    return { code: 'SX', params, segmentNumber: numberToken.value };
+    throw new ParseError('Expected T selector format like T1 or T*', token.span);
   }
 
-  private parsePnrRetrieve(params: CommandParam[]): ParsedCommand {
+  private readRequiredValue(errorMessage: string): Token {
     this.skipWs();
     const token = this.peek();
-    if (!token || !['REC_LOCATOR', 'AGENT_SIGN', 'FREETEXT'].includes(token.type)) {
-      throw new ParseError('Expected record locator after RT', token?.span);
-    }
-
-    if (!isRecLocator(token.lexeme)) {
-      throw new ParseError('Record locator must be 6 alphanumeric characters', token.span);
+    if (!token || ['EOF', 'WS', 'SLASH', 'STAR', 'DASH'].includes(token.type)) {
+      throw new ParseError(errorMessage, token?.span);
     }
 
     this.index += 1;
-    params.push({ name: 'recordLocator', value: token.lexeme });
-    return { code: 'RT', params, recordLocator: token.lexeme };
-  }
-
-  private tryParseAreaSelector(): AreaSelector | undefined {
-    const first = this.peek();
-    if (!first) {
-      return undefined;
-    }
-
-    if (first.type === 'STAR') {
-      this.index += 1;
-      return '*';
-    }
-
-    if (first.type !== 'AREA_LETTER') {
-      return undefined;
-    }
-
-    const checkpoint = this.index;
-    const letters: AreaLetter[] = [first.value];
-    this.index += 1;
-
-    while (true) {
-      const slash = this.peek();
-      if (!slash || slash.type !== 'SLASH') {
-        break;
-      }
-      const next = this.peek(1);
-      if (!next || next.type !== 'AREA_LETTER') {
-        throw new ParseError('Expected area letter after "/" in area selector', next?.span ?? slash.span);
-      }
-      this.index += 2;
-      letters.push(next.value);
-    }
-
-    if (letters.length > 1) {
-      return letters;
-    }
-
-    const next = this.peek();
-    if (!next || next.type === 'WS' || next.type === 'EOF') {
-      return letters[0];
-    }
-
-    this.index = checkpoint;
-    return undefined;
+    return token;
   }
 
   private expect(type: Token['type'], message: string): Token {
@@ -307,6 +383,7 @@ class Parser {
     if (!token || token.type !== type) {
       throw new ParseError(message, token?.span);
     }
+
     this.index += 1;
     return token;
   }
@@ -317,6 +394,7 @@ class Parser {
       this.index += 1;
       return true;
     }
+
     return false;
   }
 
@@ -349,6 +427,7 @@ class Parser {
     if (index < 0 || index >= this.tokens.length) {
       return undefined;
     }
+
     return this.tokens[index];
   }
 
@@ -356,6 +435,7 @@ class Parser {
     if (existing) {
       return existing;
     }
+
     let end: SourceSpan = start;
     for (let i = this.tokens.length - 1; i >= 0; i -= 1) {
       const token = this.tokens[i];
@@ -367,6 +447,7 @@ class Parser {
         break;
       }
     }
+
     return { start: start.start, end: end.end };
   }
 }
