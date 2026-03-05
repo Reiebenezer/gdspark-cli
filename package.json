@@ -1,6 +1,6 @@
 {
   "name": "@reiebenezer/gdspark-parser",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "GDS command lexer/parser library",
   "type": "module",
   "private": false,
