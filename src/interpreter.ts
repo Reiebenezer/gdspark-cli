@@ -12,7 +12,6 @@ import type {
 import type { Context, PassengerData } from './context';
 import type { BookingClass, Flight } from './scenario';
 import { isDateEqual } from './utils';
-import { displayError, displayFlights, displaySelectFlight } from './display';
 
 const MONTHS = {
   JAN: 0,
@@ -36,7 +35,7 @@ export function handleCommand(
 ) {
   switch (command.code) {
     case 'AN':
-      handleAvailability(command as AvailabilityCommand);
+      return handleAvailability(command as AvailabilityCommand);
       break;
 
     case 'SS':
@@ -103,7 +102,7 @@ export function handleCommand(
       );
     }
 
-    displayFlights(filteredFlights);
+    return filteredFlights;
   }
 
   function handleSelectFlight({
@@ -116,8 +115,6 @@ export function handleCommand(
       flightNumber,
       passengerCount,
     };
-
-    displaySelectFlight(command as SellCommand);
   }
 
   function handleAddName(command: NameCommand) {
@@ -144,7 +141,7 @@ export function handleCommand(
   }
 
   function handleAddPassengerEmail(command: PassengerEmailCommand) {
-    context.setPassengerMobile(command.email);
+    context.setPassengerEmail(command.email);
   }
 
   function handleSetTicketLimit(command: TicketingLimitCommand) {
@@ -172,9 +169,8 @@ export function handleCommand(
      * to the passenger count projected in SS
      */
     if (context.pnrData?.passengerCount !== context.passengerCount) {
-      displayError(
+      throw new Error(
         `Passenger count mismatch. Registered ${context.pnrData?.passengerCount} passengers, but found ${context.passengerCount} names`,
-        context,
       );
     }
   }

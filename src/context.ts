@@ -103,7 +103,7 @@ export interface Context {
   readonly passengerCount: number;
 
   setPassengerMobile(mobile: string): void;
-  setPassengerEmail(email: EmailString): void;
+  setPassengerEmail(email: string): void;
 
   setTicketExpiry(date: Date): void;
 
@@ -115,11 +115,9 @@ interface PNRData {
   bookingClass: BookingClass;
   flightNumber: number;
   passengerMobile?: string;
-  passengerEmail?: EmailString;
+  passengerEmail?: string;
   ticketExpiry?: Date;
 }
-
-type EmailString = `${string}@${string}.${string}`;
 
 export interface PassengerData {
   surname: string;
