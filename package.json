@@ -1,6 +1,6 @@
 {
   "name": "gdspark-interpreter",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Internal interpreter utilities for running GDSpark command flows in frontend applications.",
   "type": "module",
   "private": false,
@@ -13,7 +13,7 @@
     "./display": "./src/display.ts",
     "./interpreter": "./src/interpreter.ts",
     "./scenario": "./src/scenario.ts",
-    "./utils": "./src/utils.ts"
+    "./types": "./src/types.ts"
   },
   "files": [
     "src"

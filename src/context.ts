@@ -8,58 +8,71 @@
 import type { Command } from '@reiebenezer/gdspark-parser/types';
 import {
   BOOKING_CLASS_CODES,
-  type BookingClass,
-  type Flight,
-} from './scenario';
+  InterpreterError,
+  type Context,
+  type ContextListener,
+  type PassengerData,
+  type PNRData,
+} from './types';
 
 export default function ContextHandler(): Context {
-  const commandStack: Command[] = [];
+  const commandStack: {
+    command: Command;
+    reverse?: () => void;
+  }[] = [];
 
-  /** SS command data */
   let pnrData: PNRData | undefined = undefined;
-
-  /** Passenger data */
-  const passengers: PassengerData[] = [];
+  let passengers: PassengerData[] = [];
+  const listeners: ContextListener[] = [];
 
   return {
-    addToCommandStack(command: Command) {
-      commandStack.push(command);
-
+    addToCommandStack(command, reverse) {
+      commandStack.push({ command, reverse });
       return commandStack.length - 1;
     },
 
-    purgeFromCommandStack(line: number) {
-      return commandStack.splice(line, 1)[0];
+    purgeFromCommandStack(line) {
+      const stackItem = commandStack.splice(line, 1)[0];
+      if (!stackItem) return;
+
+      stackItem.reverse?.();
+      return stackItem.command;
     },
 
     get pnrData() {
       if (!pnrData) {
-        throw new Error(
+        throw new InterpreterError(
           'PNR Data not defined. Use the SS command before accessing PNR data',
         );
       }
 
-      return pnrData;
+      return structuredClone(pnrData);
     },
 
     set pnrData(data) {
-      if (data.passengerCount === 0) {
-        throw new Error('Passenger count cannot be zero on a ticket!');
-      }
-
-      if (data.flightNumber < 1) {
-        throw new Error('Invalid flight number.');
-      }
-
-      if (!BOOKING_CLASS_CODES.includes(data.bookingClass)) {
-        throw new Error('Invalid booking class');
-      }
-
       pnrData = data;
+      invokeUpdate();
     },
 
-    addPassenger(data: PassengerData) {
-      passengers.push(data);
+    unsetPNRData() {
+      pnrData = undefined;
+    },
+
+    addPassenger(...data) {
+      passengers.push(...data);
+      invokeUpdate();
+    },
+
+    removePassenger(...data) {
+      passengers = passengers.filter(
+        (p) =>
+          !data.some(
+            (p2) =>
+              p2.surname === p.surname &&
+              p2.givenName === p.givenName &&
+              p2.title === p.title,
+          ),
+      );
     },
 
     get passengerCount() {
@@ -70,57 +83,64 @@ export default function ContextHandler(): Context {
       if (!pnrData) return;
 
       pnrData.passengerMobile = mobile;
+      invokeUpdate();
     },
 
     setPassengerEmail(email) {
       if (!pnrData) return;
 
       pnrData.passengerEmail = email;
+      invokeUpdate();
     },
 
     setTicketExpiry(date) {
       if (!pnrData) return;
 
       pnrData.ticketExpiry = date;
+      invokeUpdate();
     },
 
-    getDebugString() {
-      return JSON.stringify({
-        currentPNRData: pnrData,
-        passengerNames: passengers
-      }, undefined, 3);
+    unsetPassengerMobile() {
+      if (!pnrData) return;
+
+      pnrData.passengerMobile = undefined;
+      invokeUpdate();
+    },
+
+    unsetPassengerEmail() {
+      if (!pnrData) return;
+
+      pnrData.passengerEmail = undefined;
+      invokeUpdate();
+    },
+
+    unsetTicketExpiry() {
+      if (!pnrData) return;
+
+      pnrData.ticketExpiry = undefined;
+      invokeUpdate();
+    },
+
+    addListener(listener) {
+      listeners.push(listener);
+    },
+
+    getReadonlyData() {
+      if (!pnrData)
+        throw new InterpreterError(
+          'Cannot get readonly data without selecting flight.',
+        );
+
+      return {
+        pnrData,
+        passengers,
+      };
     },
   };
-}
 
-export interface Context {
-  addToCommandStack(command: Command): number;
-  purgeFromCommandStack(line: number): Command | undefined;
-
-  pnrData?: PNRData;
-
-  addPassenger(data: PassengerData): void;
-  readonly passengerCount: number;
-
-  setPassengerMobile(mobile: string): void;
-  setPassengerEmail(email: string): void;
-
-  setTicketExpiry(date: Date): void;
-
-  getDebugString(): string;
-}
-
-interface PNRData {
-  passengerCount: number;
-  bookingClass: BookingClass;
-  flightNumber: number;
-  passengerMobile?: string;
-  passengerEmail?: string;
-  ticketExpiry?: Date;
-}
-
-export interface PassengerData {
-  surname: string;
-  givenName: string;
-  title?: string;
+  function invokeUpdate() {
+    listeners.forEach(
+      (l) => pnrData && l({ pnrData: structuredClone(pnrData), passengers }),
+    );
+  }
 }

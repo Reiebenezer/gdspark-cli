@@ -2,15 +2,21 @@ import type {
   AvailabilityCommand,
   Command,
   DeleteLineCommand,
-  EndRecordCommand,
   NameCommand,
   PassengerEmailCommand,
   PassengerMobileCommand,
   SellCommand,
   TicketingLimitCommand,
+  EndRecordCommand,
 } from '@reiebenezer/gdspark-parser/types';
-import type { Context, PassengerData } from './context';
-import type { BookingClass, Flight } from './scenario';
+import {
+  InterpreterError,
+  type BookingClass,
+  type Context,
+  type Flight,
+  type PassengerData,
+  type ReadonlyContextData,
+} from './types';
 import { isDateEqual } from './utils';
 
 const MONTHS = {
@@ -29,54 +35,65 @@ const MONTHS = {
 } as const;
 
 export function handleCommand(
+  command: AvailabilityCommand,
+  context: Context,
+  flights: Flight[],
+): Flight[];
+export function handleCommand(
+  command: EndRecordCommand,
+  context: Context,
+  flights: Flight[],
+): ReadonlyContextData;
+export function handleCommand(
+  command: Command,
+  context: Context,
+  flights: Flight[],
+): void | Flight[] | ReadonlyContextData;
+export function handleCommand(
   command: Command,
   context: Context,
   flights: Flight[],
 ) {
   switch (command.code) {
     case 'AN':
-      return handleAvailability(command as AvailabilityCommand);
-      break;
+      return handleCheckForAvailableFlights(command as AvailabilityCommand);
 
     case 'SS':
-      handleSelectFlight(command as SellCommand);
-      break;
+      return handleSelectFlight(command as SellCommand);
 
     case 'NM':
-      handleAddName(command as NameCommand);
-      break;
+      return handleAddName(command as NameCommand);
 
     case 'APM':
-      handleAddPassengerMobile(command as PassengerMobileCommand);
-      break;
+      return handleAddPassengerMobile(command as PassengerMobileCommand);
 
     case 'APE':
-      handleAddPassengerEmail(command as PassengerEmailCommand);
-      break;
+      return handleAddPassengerEmail(command as PassengerEmailCommand);
 
     case 'TKTL':
-      handleSetTicketLimit(command as TicketingLimitCommand);
-      break;
+      return handleSetTicketLimit(command as TicketingLimitCommand);
 
     case 'ER':
-      handleSaveRecord();
-      break;
+      return handleSaveRecord();
 
     case 'XE':
-      handleDeleteLine(command as DeleteLineCommand);
-      break;
+      return handleDeleteLine(command as DeleteLineCommand);
 
     case 'FXP':
     case 'FXB':
     case 'TTK':
-      break;
+      return;
   }
 
-  function handleAvailability(command: AvailabilityCommand) {
+  /**
+   * A display function for showing available list of flights.
+   * @returns A list of flights.
+   */
+  function handleCheckForAvailableFlights(command: AvailabilityCommand) {
     let month = MONTHS[command.travelMonth as keyof typeof MONTHS];
 
     if (!month) {
-      throw new Error(`Invalid month code ${command.travelMonth}`); // this should not happen as the incorrect code is filtered out at parser level
+      throw new InterpreterError(`Invalid month code ${command.travelMonth}`); // this should not happen as the incorrect code is filtered out at parser level
     }
 
     // Auto-parse new year (future lookahead)
@@ -102,46 +119,98 @@ export function handleCommand(
       );
     }
 
+    /** Add to command stack */
+    context.addToCommandStack(command);
+
+    /** Check if there are entries, throw an error if no entries */
+    if (filteredFlights.length === 0) {
+      throw new InterpreterError(
+        'No flights are available for the selected query',
+      );
+    }
+
     return filteredFlights;
   }
 
+  /**
+   * Selects a flight from the available list of flights.
+   * Flight numbers start from 1 onwards
+   */
   function handleSelectFlight({
     bookingClass,
     flightNumber,
     passengerCount,
   }: SellCommand) {
+    if (flightNumber < 0 || flightNumber >= flights.length) {
+      throw new InterpreterError('Flight number is not on the list!');
+    }
+
+    const selectedFlight = flights[flightNumber - 1];
+
+    // Check if selected flight exists
+    if (!selectedFlight) {
+      throw new InterpreterError('Flight number is not on the list!');
+    }
+
+    // Check if valid booking class and exists for the selected flight
+    if (!(bookingClass in selectedFlight.booking)) {
+      throw new InterpreterError('Invalid booking class for selected flight.');
+    }
+
+    // Check if there are enough seats
+    if (selectedFlight.booking[bookingClass as BookingClass] < passengerCount) {
+      throw new Error(
+        'Not enough passenger seats available for selected booking class.',
+      );
+    }
+
+    // Add to context window
     context.pnrData = {
       bookingClass: bookingClass as BookingClass,
       flightNumber,
       passengerCount,
     };
+
+    // Command stack
+    context.addToCommandStack(command, context.unsetPNRData);
   }
 
+  /** Adds a bunch of passengers (NM command) */
   function handleAddName(command: NameCommand) {
-    command.entries.forEach((v) => {
+    const passengers = command.entries.reduce((p, v) => {
       if (v.count === 1) {
-        context.addPassenger({
+        p.push({
           surname: v.surname,
           givenName: v.givenNames[0]!,
           title: command.title,
         });
       } else
         for (const givenName of v.givenNames) {
-          context.addPassenger({
+          p.push({
             surname: v.surname,
             givenName,
             title: command.title,
           });
         }
+
+      return p;
+    }, [] as PassengerData[]);
+
+    context.addPassenger(...passengers);
+
+    context.addToCommandStack(command, () => {
+      context.removePassenger(...passengers);
     });
   }
 
   function handleAddPassengerMobile(command: PassengerMobileCommand) {
     context.setPassengerMobile(command.mobile);
+    context.addToCommandStack(command, context.unsetPassengerMobile);
   }
 
   function handleAddPassengerEmail(command: PassengerEmailCommand) {
     context.setPassengerEmail(command.email);
+    context.addToCommandStack(command, context.unsetPassengerEmail);
   }
 
   function handleSetTicketLimit(command: TicketingLimitCommand) {
@@ -159,20 +228,30 @@ export function handleCommand(
     }
 
     context.setTicketExpiry(expiryDate);
+    context.addToCommandStack(command, context.unsetTicketExpiry);
   }
 
   function handleSaveRecord() {
     // Do a check of everything
 
-    /**
-     * Compares registered passenger count from the NM command
-     * to the passenger count projected in SS
-     */
+    // Check if all required entries exist
+    if (!context.pnrData) {
+      throw new InterpreterError(`Flight number not selected.`);
+    }
+
+    if (!context.pnrData.ticketExpiry) {
+      throw new InterpreterError(`Ticket expiry date not specified.`);
+    }
+
+    // Compares passenger count registered via SS vs. number of names listed via NM
     if (context.pnrData?.passengerCount !== context.passengerCount) {
-      throw new Error(
+      throw new InterpreterError(
         `Passenger count mismatch. Registered ${context.pnrData?.passengerCount} passengers, but found ${context.passengerCount} names`,
       );
     }
+
+    // return a readonly copy of items
+    return context.getReadonlyData();
   }
 
   function handleDeleteLine(command: DeleteLineCommand) {
