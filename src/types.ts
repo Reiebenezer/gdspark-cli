@@ -80,6 +80,7 @@ export interface FlightQueryParams {
 
 export interface PNRSegment {
   airlineCode: AirlineCode;
+  flightNumber: number;
   bookingClass: BookingClass;
   dateOfFlight: Date;
   origin: City;

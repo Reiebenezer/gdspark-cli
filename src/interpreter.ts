@@ -239,7 +239,7 @@ export default function GDSparkInterpreter(
       throw new RuntimeError('Invalid segment selection');
 
     // We are trying to sell this segment
-    const { airlineCode, booking, dateOfFlight, origin, destination } =
+    const { airlineCode, flightNumber, booking, dateOfFlight, origin, destination } =
       _displayedFlights[command.flightNumber - 1]!;
 
     // Check for status code
@@ -259,6 +259,7 @@ export default function GDSparkInterpreter(
     pnr.update((prev) => {
       prev.segments.push({
         airlineCode,
+        flightNumber,
         bookingClass: command.bookingClass as BookingClass,
         dateOfFlight,
         origin,
