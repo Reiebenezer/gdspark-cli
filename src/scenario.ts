@@ -8,7 +8,7 @@ export function generateFlights(seed?: number) {
   // This allows for even distribution amongst flights
   const airportPairs = createShuffledAirportPairs(seeder);
 
-  const numberOfFlights = seeder.nextFromIntRange(100, 500);
+  const numberOfFlights = seeder.nextFromIntRange(1000, 2000);
   const flights: Flight[] = [];
 
   for (let i = 0; i < numberOfFlights; i++) {

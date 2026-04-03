@@ -1,6 +1,6 @@
 {
   "name": "@reiebenezer/gdspark-interpreter",
-  "version": "1.1.9",
+  "version": "1.1.10",
   "description": "Internal interpreter utilities for running GDSpark command flows in frontend applications.",
   "type": "module",
   "main": "./dist/index.js",
