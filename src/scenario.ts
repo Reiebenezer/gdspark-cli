@@ -44,7 +44,7 @@ export function generateRandomFlightDetails(
   const filteredAirports = AIRPORTS.filter((c) => c !== origin);
 
   // destination
-  const destination = AIRPORTS[index % filteredAirports.length]!;
+  const destination = filteredAirports[index % filteredAirports.length]!;
 
   // Booking classes
   const booking: Flight['booking'] = {
