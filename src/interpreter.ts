@@ -163,8 +163,8 @@ export default function GDSparkInterpreter(
       );
     },
 
-    addDebugMethod(fn: (flights: Flight[], displayedFlights?: Flight[], pnr?: PNR)  => void) {
-      return effect(() => fn(flights, displayedFlights.get(), pnr.get()), [displayedFlights, pnr]);
+    addDebugMethod(fn: (flights: Flight[], flightQueryParams?: FlightQueryParams, displayedFlights?: Flight[], pnr?: PNR)  => void) {
+      return effect(() => fn(flights, flightQueryParams.get(), displayedFlights.get(), pnr.get()), [displayedFlights, pnr]);
     }
   };
 
