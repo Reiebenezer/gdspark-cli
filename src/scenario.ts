@@ -8,23 +8,22 @@ export function generateFlights(seed?: number) {
   const flights: Flight[] = [];
 
   for (let i = 0; i < numberOfFlights; i++) {
-    flights.push(generateRandomFlightDetails(seeder));
+    flights.push(generateRandomFlightDetails(seeder, numberOfFlights, i));
   }
 
   return flights;
 }
 
-export function generateRandomFlightDetails(seeder: Seeder): Flight {
-  const dayDurationInMs = 1000 * 60 * 60 * 24;
-
+export function generateRandomFlightDetails(seeder: Seeder, numberOfFlights: number, index: number): Flight {
   const airlineCode = seeder.pickFrom(AIRLINE_IATA_CODES);
   const flightNumber = seeder.nextFromIntRange(100, 1000);
-  const dateOfFlight = seeder.nextDate(
-    new Date(),
-    new Date(Date.now() + dayDurationInMs * 5),
-  );
+
+  const dateOfFlight = new Date();
   
-  // Add random hours
+  // Deterministic date to ensure equal distribution
+  dateOfFlight.setDate(dateOfFlight.getDate() + Math.floor(index / numberOfFlights * 5));
+  
+  // Made hours random though
   dateOfFlight.setHours(seeder.nextFromIntRange(1, 25), seeder.nextFromIntRange(1, 60), 0, 0);
 
   // origin
