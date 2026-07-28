@@ -1,4 +1,4 @@
-import { MONTHS, type Month, RuntimeError } from './types';
+import { MONTHS, type Month, RuntimeError, type Log } from "./types";
 
 /**
  * Compares two dates if they're equal, regardless of time
@@ -17,7 +17,7 @@ export function isDateEqual(dateA: Date, dateB: Date) {
  */
 export function calculateDate(month: Month, day: number) {
   const monthIdx = MONTHS.indexOf(month);
-  if (monthIdx === -1) throw new RuntimeError('Invalid month');
+  if (monthIdx === -1) throw new RuntimeError("Invalid month");
 
   const now = new Date();
   const year = now.getFullYear();
@@ -30,7 +30,7 @@ export function calculateDate(month: Month, day: number) {
     candidate.getMonth() !== monthIdx ||
     candidate.getDate() !== day
   )
-    throw new Error('Invalid date');
+    throw new Error("Invalid date");
 
   // Normalize for dates
   candidate.setHours(0, 0, 0, 0);
@@ -44,4 +44,8 @@ export function calculateDate(month: Month, day: number) {
   }
 
   return candidate;
+}
+
+export function createLog(text: string, type: Log["type"] = "info"): Log {
+  return { type, text };
 }

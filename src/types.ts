@@ -1,25 +1,25 @@
-import type { Command, ParsedCommand } from '@reiebenezer/gdspark-parser/types';
+import type { Command, ParsedCommand } from "@reiebenezer/gdspark-parser/types";
 
 export const AIRLINE_IATA_CODES = [
-  'PR', // Philippine Airlines
-  '5J', // Cebu Pacific
-  'Z2', // Air Asia Philippines
-  '2P', // PAL Express
-  'DG', // CebGo
-  'T6', // Airswift
+  "PR", // Philippine Airlines
+  "5J", // Cebu Pacific
+  "Z2", // Air Asia Philippines
+  "2P", // PAL Express
+  "DG", // CebGo
+  "T6", // Airswift
 ] as const; // ICAO
 
 export const AIRPORTS = [
-  'MNL', // Ninoy Aquino International Airport
-  'CEB', // Mactan-Cebu International Airport
-  'ILO', // Iloilo International Airport
-  'CRK', // Clark International Airport
-  'DVO', // Francisco Bangoy International Airport (Davao)
-  'PPS', // Puerto Princesa National Airport
-  'MPH', // Godofredo P. Ramos Airport (Caticlan/Boracay)
-  'KLO', // Kalibo International Airport
-  'ZBO', // Zamboanga Airport
-  'BCD', // Bacolod-Silay International Airport
+  "MNL", // Ninoy Aquino International Airport
+  "CEB", // Mactan-Cebu International Airport
+  "ILO", // Iloilo International Airport
+  "CRK", // Clark International Airport
+  "DVO", // Francisco Bangoy International Airport (Davao)
+  "PPS", // Puerto Princesa National Airport
+  "MPH", // Godofredo P. Ramos Airport (Caticlan/Boracay)
+  "KLO", // Kalibo International Airport
+  "ZBO", // Zamboanga Airport
+  "BCD", // Bacolod-Silay International Airport
 ] as const;
 
 /** This set of flight classes is a trimmed-down version of the Philippine Airlines (PAL) list of Booking Class Codes (BCCs) */
@@ -27,32 +27,32 @@ export const BOOKING_CLASS_CODES = [
   // ------------------------------------------------------------------------------------
   // FIRST CLASS
   // ------------------------------------------------------------------------------------
-  'F',
+  "F",
 
   // ------------------------------------------------------------------------------------
   // BUSINESS CLASS
   // ------------------------------------------------------------------------------------
-  'J',
-  'C',
+  "J",
+  "C",
 
   // ------------------------------------------------------------------------------------
   // ECONOMY PREMIUM (Upgrades or premium seating)
   // ------------------------------------------------------------------------------------
-  'W',
-  'N',
+  "W",
+  "N",
 
   // ------------------------------------------------------------------------------------
   // ECONOMY FLEX (100% accrual, lower change fees)
   // ------------------------------------------------------------------------------------
-  'Y',
-  'L',
+  "Y",
+  "L",
 
   // ------------------------------------------------------------------------------------
   // ECONOMY DISCOUNTED/SAVER (lower accrual, higher fees, no baggage)
   // ------------------------------------------------------------------------------------
-  'Q',
-  'V',
-  'O',
+  "Q",
+  "V",
+  "O",
 ] as const;
 
 export type AirlineCode = (typeof AIRLINE_IATA_CODES)[number];
@@ -89,7 +89,7 @@ export interface PNRSegment {
   passengerCount: number;
 }
 
-export type StatusCode = 'HK' | 'UC'; // simplified, no need for asynchronous flight simulation changes
+export type StatusCode = "HK" | "UC"; // simplified, no need for asynchronous flight simulation changes
 
 export interface PNRPassengerName {
   surname: string;
@@ -111,20 +111,19 @@ export interface TestDetails {
   minCommandsEntered: number;
 }
 
-/** 
+/**
  * Scoring
- * 
- * AN Query: 
- * PNR: 
+ *
+ * AN Query:
+ * PNR:
  *  -> Correct Segments: 1 point per correct SS :: correct/totalrequired
  *  -> Correct Names: 1 point per correct name :: correct/totalrequired
  *  -> Correct Contacts: 1 point per correct contact :: correct/totalrequired
  * Excess commands entered: -1 point per excess
- * 
- * 
+ *
+ *
  */
 export interface Score {
-
   /** Total correct query points (1 point for Date, 1 point for origin, 1 point for destination, bonus 1 point for airline code) / total */
   query: readonly [number, number];
 
@@ -155,18 +154,18 @@ export interface SessionState {
 }
 
 export const MONTHS = [
-  'JAN',
-  'FEB',
-  'MAR',
-  'APR',
-  'MAY',
-  'JUN',
-  'JUL',
-  'AUG',
-  'SEP',
-  'OCT',
-  'NOV',
-  'DEC',
+  "JAN",
+  "FEB",
+  "MAR",
+  "APR",
+  "MAY",
+  "JUN",
+  "JUL",
+  "AUG",
+  "SEP",
+  "OCT",
+  "NOV",
+  "DEC",
 ] as const;
 
 export type Month = (typeof MONTHS)[number];
@@ -175,7 +174,7 @@ export type Month = (typeof MONTHS)[number];
 // Logging (for listening via frontend)
 // ------------------------------------------------------------------------------------
 export interface Log {
-  type: 'warn' | 'err' | 'info';
+  type: "warn" | "err" | "info";
   text: string;
 }
 
@@ -183,4 +182,20 @@ export class RuntimeError extends Error {
   constructor(message?: string) {
     super(message);
   }
+}
+
+export type InterpreterReturnType =
+  | { type: "AN"; params: FlightQueryParams }
+  | { type: "SS"; segment: PNRSegment | null }
+  | { type: "NM"; names: PNRPassengerName[] }
+  | { type: "APM"; mobile: string }
+  | { type: "APE"; email: string }
+  | { type: "XE", segments: PNRSegment[] }
+  | { type: "TKTL", date: Date }
+  | { type: "ER", data: CompletePNRData }
+  | { type: "RuntimeError" };
+
+export interface CompletePNRData {
+  flightQueryParams: FlightQueryParams;
+  pnr: PNR
 }
