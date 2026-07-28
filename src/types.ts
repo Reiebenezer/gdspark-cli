@@ -185,7 +185,7 @@ export class RuntimeError extends Error {
 }
 
 export type InterpreterReturnType =
-  | { type: "AN"; params: FlightQueryParams }
+  | { type: "AN"; params: FlightQueryParams; flights: Flight[] }
   | { type: "SS"; segment: PNRSegment | null }
   | { type: "NM"; names: PNRPassengerName[] }
   | { type: "APM"; mobile: string }

@@ -35,7 +35,7 @@ import type {
   TicketingLimitCommand,
   EndRecordCommand,
 } from "@reiebenezer/gdspark-parser/types";
-import { calculateDate, createLog, isDateEqual } from "./utils";
+import { calculateDate, createLog, filterFlights, isDateEqual } from "./utils";
 
 export default function GDSparkInterpreter(seed?: number) {
   const flights = generateFlights(seed);
@@ -149,6 +149,7 @@ export default function GDSparkInterpreter(seed?: number) {
       {
         type: "AN",
         params: flightQueryParams,
+        flights: filterFlights(flights, flightQueryParams)
       },
       null,
     ];
@@ -169,19 +170,7 @@ export default function GDSparkInterpreter(seed?: number) {
       );
     }
 
-    const filteredFlights = flights.filter(
-      (f) =>
-        flightQueryParams!.dateOfFlight.getFullYear() ===
-          f.dateOfFlight.getFullYear() &&
-        flightQueryParams!.dateOfFlight.getMonth() ===
-          f.dateOfFlight.getMonth() &&
-        flightQueryParams!.dateOfFlight.getDate() ===
-          f.dateOfFlight.getDate() &&
-        flightQueryParams!.origin === f.origin &&
-        flightQueryParams!.destination === f.destination &&
-        (!flightQueryParams!.airlineBrandCode ||
-          flightQueryParams!.airlineBrandCode === f.airlineCode),
-    );
+    const filteredFlights = filterFlights(flights, flightQueryParams);
 
     if (
       command.flightNumber <= 0 ||

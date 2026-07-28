@@ -1,4 +1,11 @@
-import { MONTHS, type Month, RuntimeError, type Log } from "./types";
+import type { Flight } from "../dist/types";
+import {
+  MONTHS,
+  type Month,
+  RuntimeError,
+  type Log,
+  type FlightQueryParams,
+} from "./types";
 
 /**
  * Compares two dates if they're equal, regardless of time
@@ -48,4 +55,16 @@ export function calculateDate(month: Month, day: number) {
 
 export function createLog(text: string, type: Log["type"] = "info"): Log {
   return { type, text };
+}
+
+export function filterFlights(flights: Flight[], params: FlightQueryParams) {
+  return flights.filter(
+    (f) =>
+      params.dateOfFlight.getFullYear() === f.dateOfFlight.getFullYear() &&
+      params.dateOfFlight.getMonth() === f.dateOfFlight.getMonth() &&
+      params.dateOfFlight.getDate() === f.dateOfFlight.getDate() &&
+      params.origin === f.origin &&
+      params.destination === f.destination &&
+      (!params.airlineBrandCode || params.airlineBrandCode === f.airlineCode),
+  );
 }
